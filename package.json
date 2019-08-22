@@ -1,0 +1,15 @@
+{
+  "name": "go-deploy-kit",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "curl -H \"Content-Type:application/json\" -X POST -d '{\"script\":\"test.sh\",\"argument\":\"aaa\"}' http://localhost:8000/webhook/run/deploy -i",
+    "upload": "curl -F 'file=@./test.txt' http://localhost:8000/upload -v",
+    "start": "env GDK_UPLOAD_DIR=./ups/ GDK_SCRIPT_DIR=./shells/ go run main.go",
+    "build": "go build main.go"
+  },
+  "author": "",
+  "license": "ISC"
+}
