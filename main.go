@@ -9,6 +9,7 @@ import (
 	"os"
 	"io"
 	"os/exec"
+	"errors"
 )
 
 // 定义一个运行shell脚本的命令结构体，用于和 json 格式转换
@@ -111,22 +112,32 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	
 }
 
+func Fail(w http.ResponseWriter, err error){
+	fmt.Fprintf(w, fmt.Sprintf(`{ "errno": -1, "msg": " Error: %s"}`,  err.Error() ))
+}
+
+func Success(w http.ResponseWriter, data string){
+	fmt.Fprintf(w, fmt.Sprintf(`{ "errno": 0, "msg": " %s"}`,  data))
+}
+
 // 接受webhook的请求处理函数
 func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 	// get params
 	body, _ := ioutil.ReadAll(r.Body)
+	fmt.Println(fmt.Sprintf(`Webhook Body: %s`, body))
     r.Body.Close()
 	var command DeployCommand
 	// 将参数中的指令转换成 结构体
 	if err := json.Unmarshal(body, &command); err != nil {
-		fmt.Fprintf(w, "{ \"errno\": -1, \"msg\": \" Error:" + err.Error() +"\"}")
+		Fail(w, err)
 		return
 	} 	
 	// 执行shell脚本，输出结果
 	if output, err := RunScriptFile(command); err != nil {
-		fmt.Fprintf(w, "{ \"errno\": -1, \"msg\": \"" + err.Error() + "\"}" )
+		Fail(w, err)
+		return
 	}else{
-		fmt.Fprintf(w, "{ \"errno\": 0, \"msg\": \"" + output + "\"}" )
+		Success(w, output)
 	}
 }
 
@@ -134,19 +145,20 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	// 
 	if method := r.Method; method == "GET" {
-		fmt.Fprintf(w, "{ \"errno\": -1, \"msg\": \" Error: Only support Post\"}")
+		Fail(w, errors.New("Only support Post"))
+		return
 	}
     r.ParseMultipartForm(32 << 20)
 	file, handler, err := r.FormFile("file")
 	if err != nil {
-		fmt.Fprintf(w, "{ \"errno\": -1, \"msg\": \" Error:" + err.Error() +"\"}")
+		Fail(w, err)
 		return
 	}
 	defer file.Close()
 	// 打开文件流，默认使用覆盖模式，同名的文件会被覆盖
 	f, err := os.OpenFile(UPLOAD_DIR + handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
-		fmt.Fprintf(w, "{ \"errno\": -1, \"msg\": \" Error:" + err.Error() +"\"}")
+		Fail(w, err)
 		return
 	}
 	defer f.Close()
@@ -160,14 +172,15 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 			Argument: argument,
 		}
 		if output, err := RunScriptFile( *command); err != nil {
-			fmt.Fprintf(w, "{ \"errno\": -1, \"msg\": \" Error:" + err.Error() +"\"}")
+			Fail(w, err)
+			return
 		}else {
-			fmt.Fprintf(w, "{ \"errno\":0 , \"msg\":\"" + output + "\"}" )
+			Success(w, output)
 			return;
 		}
 	}
 
-	fmt.Fprintf(w, "{ \"errno\":0 , \"msg\":\"upload success\"}" )
+	Success(w, "upload success")
 }
 
 func main() {

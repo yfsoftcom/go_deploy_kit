@@ -14,4 +14,4 @@
 
 - 执行 shell 的方法
 
-  `curl -H \"Content-Type:application/json\" -X POST -d '{\"script\":\"test.sh\",\"argument\":\"aaa\"}' http://ip:8000/webhook/run/deploy -i`  其中 `{\"script\":\"test.sh\",\"argument\":\"aaa\"}` 中 script 是对应的shell文件名，要求是带后缀的，比如 `test.sh` 或者 `test.py` 等等，`argument` 是后面需要执行带有的参数，直接以字符串的方式并接起来，比如 `-Max=100 -Min=1`,最后会执行 `test.sh -Max=100 -Min=1` 当然需要在shell中自己解析这些参数信息。
+  `curl -H "Content-Type:application/json" -X POST -d '{"script":"test.sh","argument":"aaa"}' http://ip:8000/webhook/run/deploy -i`  其中 `{\"script\":\"test.sh\",\"argument\":\"aaa\"}` 中 script 是对应的shell文件名，要求是带后缀的，比如 `test.sh` 或者 `test.py` 等等，`argument` 是后面需要执行带有的参数，直接以字符串的方式并接起来，比如 `-Max=100 -Min=1`,最后会执行 `test.sh -Max=100 -Min=1` 当然需要在shell中自己解析这些参数信息。
