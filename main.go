@@ -141,6 +141,24 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// 接受webhook的请求处理函数
+func DeployHandler(w http.ResponseWriter, r *http.Request) {
+	// get params
+	var command DeployCommand
+	// 将参数中的指令转换成 结构体
+	if err := json.Unmarshal([]byte(`{"script":"deploy.sh", "argument":""}`), &command); err != nil {
+		Fail(w, err)
+		return
+	} 	
+	// 执行shell脚本，输出结果
+	if output, err := RunScriptFile(command); err != nil {
+		Fail(w, err)
+		return
+	}else{
+		Success(w, output)
+	}
+}
+
 // 上传文件的函数
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	// 
@@ -186,6 +204,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	http.HandleFunc("/", IndexHandler)
 	http.HandleFunc("/webhook/run/", WebhookHandler)
+	http.HandleFunc("/webhook/deploy", DeployHandler)
 	http.HandleFunc("/upload", UploadHandler)
 	fmt.Println("Server startup at http://localhost:8000")
 	if err := http.ListenAndServe("0.0.0.0:8000", nil); err != nil {
