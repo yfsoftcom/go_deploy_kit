@@ -143,6 +143,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 
 // 接受webhook的请求处理函数
 func DeployHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println(fmt.Sprintf(`Deploy Webhook Execute`))
 	// get params
 	var command DeployCommand
 	// 将参数中的指令转换成 结构体
