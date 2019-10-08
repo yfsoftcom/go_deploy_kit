@@ -2,26 +2,30 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"fmt"
 	"os"
-	"io"
 	"os/exec"
-	"errors"
+
+	mux "github.com/gorilla/mux"
 )
 
 // 定义一个运行shell脚本的命令结构体，用于和 json 格式转换
 type DeployCommand struct {
-    Script string `json:"script"`
-    Argument  string    `json:"argument"`
+	Script   string `json:"script"`
+	Argument string `json:"argument"`
 }
 
 // 定义2个环境变量
 var (
-	UPLOAD_DIR = os.Getenv("GDK_UPLOAD_DIR")
-	SCRIPT_DIR = os.Getenv("GDK_SCRIPT_DIR")
+	UPLOAD_DIR  = os.Getenv("GDK_UPLOAD_DIR")
+	SCRIPT_DIR  = os.Getenv("GDK_SCRIPT_DIR")
+	ErrorLogger *log.Logger
+	InfoLogger  *log.Logger
 )
 
 // 初始化这些变量
@@ -32,22 +36,42 @@ func init() {
 	if SCRIPT_DIR == "" {
 		SCRIPT_DIR = "./shells/"
 	}
+
+	errorFile, err := os.OpenFile("errors.txt",
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalln("Failed to open error log file:", err)
+	}
+
+	infoFile, err := os.OpenFile("infos.txt",
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalln("Failed to open error log file:", err)
+	}
+
+	ErrorLogger = log.New(io.MultiWriter(errorFile, os.Stderr),
+		"ERROR: ",
+		log.Ldate|log.Ltime|log.Lshortfile)
+
+	InfoLogger = log.New(io.MultiWriter(infoFile, os.Stdout),
+		"INFO: ",
+		log.Ldate|log.Ltime|log.Lshortfile)
 }
 
 // 执行脚本的函数，返回结果和错误
-func RunScriptFile(command DeployCommand) (string, error){
+func RunScriptFile(command DeployCommand) (string, error) {
 	cmdStr := SCRIPT_DIR + command.Script + " " + command.Argument
-    cmd := exec.Command("/bin/bash", "-c", cmdStr)
+	cmd := exec.Command("/bin/bash", "-c", cmdStr)
 
-    if output, err := cmd.Output();  err != nil {
-        return "", err
-	}else{
+	if output, err := cmd.Output(); err != nil {
+		return "", err
+	} else {
 		return string(output), nil
-	}	
+	}
 }
 
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
-	
+
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
 	<head>
@@ -109,65 +133,74 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	</body>
 </html>
 		`)
-	
+
 }
 
-func Fail(w http.ResponseWriter, err error){
-	fmt.Fprintf(w, fmt.Sprintf(`{ "errno": -1, "msg": " Error: %s"}`,  err.Error() ))
+func Fail(w http.ResponseWriter, err error) {
+	fmt.Fprintf(w, fmt.Sprintf(`{ "errno": -1, "msg": " Error: %s"}`, err.Error()))
 }
 
-func Success(w http.ResponseWriter, data string){
-	fmt.Fprintf(w, fmt.Sprintf(`{ "errno": 0, "msg": " %s"}`,  data))
+func Success(w http.ResponseWriter, data string) {
+	fmt.Fprintf(w, fmt.Sprintf(`{ "errno": 0, "msg": " %s"}`, data))
 }
 
 // 接受webhook的请求处理函数
 func WebhookHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	filename := vars["filename"]
+	InfoLogger.Println(fmt.Sprintf(`Filename is: %s`, filename))
+
 	// get params
 	body, _ := ioutil.ReadAll(r.Body)
-	fmt.Println(fmt.Sprintf(`Webhook Body: %s`, body))
-    r.Body.Close()
+	InfoLogger.Println(fmt.Sprintf(`Webhook Body: %s`, body))
+	// 输出到日志文件和终端中
+	r.Body.Close()
 	var command DeployCommand
 	// 将参数中的指令转换成 结构体
 	if err := json.Unmarshal(body, &command); err != nil {
+		ErrorLogger.Println(err)
 		Fail(w, err)
 		return
-	} 	
+	}
 	// 执行shell脚本，输出结果
 	if output, err := RunScriptFile(command); err != nil {
+		ErrorLogger.Println(err)
 		Fail(w, err)
 		return
-	}else{
+	} else {
 		Success(w, output)
 	}
 }
 
 // 接受webhook的请求处理函数
 func DeployHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(fmt.Sprintf(`Deploy Webhook Execute`))
+	InfoLogger.Println(`Deploy Webhook Execute`)
 	// get params
 	var command DeployCommand
 	// 将参数中的指令转换成 结构体
 	if err := json.Unmarshal([]byte(`{"script":"deploy.sh", "argument":""}`), &command); err != nil {
+		ErrorLogger.Println(err)
 		Fail(w, err)
 		return
-	} 	
+	}
 	// 执行shell脚本，输出结果
 	if output, err := RunScriptFile(command); err != nil {
+		ErrorLogger.Println(err)
 		Fail(w, err)
 		return
-	}else{
+	} else {
 		Success(w, output)
 	}
 }
 
 // 上传文件的函数
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
-	// 
+	//
 	if method := r.Method; method == "GET" {
 		Fail(w, errors.New("Only support Post"))
 		return
 	}
-    r.ParseMultipartForm(32 << 20)
+	r.ParseMultipartForm(32 << 20)
 	file, handler, err := r.FormFile("file")
 	if err != nil {
 		Fail(w, err)
@@ -175,7 +208,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 	// 打开文件流，默认使用覆盖模式，同名的文件会被覆盖
-	f, err := os.OpenFile(UPLOAD_DIR + handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
+	f, err := os.OpenFile(UPLOAD_DIR+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		Fail(w, err)
 		return
@@ -183,19 +216,20 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	io.Copy(f, file)
 
-	if shell := r.PostFormValue("shell"); shell != ""{
+	if shell := r.PostFormValue("shell"); shell != "" {
 		argument := r.PostFormValue("argument")
 		// 执行脚本
-		command := & DeployCommand {
-			Script: shell,
+		command := &DeployCommand{
+			Script:   shell,
 			Argument: argument,
 		}
-		if output, err := RunScriptFile( *command); err != nil {
+		if output, err := RunScriptFile(*command); err != nil {
+			ErrorLogger.Println(err)
 			Fail(w, err)
 			return
-		}else {
+		} else {
 			Success(w, output)
-			return;
+			return
 		}
 	}
 
@@ -203,13 +237,17 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/", IndexHandler)
-	http.HandleFunc("/webhook/run/", WebhookHandler)
-	http.HandleFunc("/webhook/deploy", DeployHandler)
-	http.HandleFunc("/upload", UploadHandler)
+	r := mux.NewRouter()
+	r.HandleFunc("/", IndexHandler)
+	r.HandleFunc("/webhook/run/", WebhookHandler)
+	r.HandleFunc("/webhook/deploy", DeployHandler)
+	r.HandleFunc("/webhook/shell/{filename}", WebhookHandler)
+	r.HandleFunc("/upload", UploadHandler)
 	fmt.Println("Server startup at http://localhost:8000")
+
+	http.Handle("/", r)
 	if err := http.ListenAndServe("0.0.0.0:8000", nil); err != nil {
-		log.Fatal("ListenAndServe: ", err)
+		ErrorLogger.Fatalln("ListenAndServe: ", err)
 	}
-	
+
 }
