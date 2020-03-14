@@ -1,3 +1,6 @@
+/*
+ The comment for the package .
+**/
 package main
 
 import (
@@ -26,19 +29,19 @@ type DeployCommand struct {
 
 // 定义2个环境变量
 var (
-	UPLOAD_DIR  = os.Getenv("GDK_UPLOAD_DIR")
-	SCRIPT_DIR  = os.Getenv("GDK_SCRIPT_DIR")
+	uploadDir   = os.Getenv("GDK_UPLOAD_DIR")
+	scriptDir   = os.Getenv("GDK_SCRIPT_DIR")
 	ErrorLogger *log.Logger
 	InfoLogger  *log.Logger
 )
 
 // 初始化这些变量
 func init() {
-	if UPLOAD_DIR == "" {
-		UPLOAD_DIR = "./uploads/"
+	if uploadDir == "" {
+		uploadDir = "./uploads/"
 	}
-	if SCRIPT_DIR == "" {
-		SCRIPT_DIR = "./shells/"
+	if scriptDir == "" {
+		scriptDir = "./shells/"
 	}
 
 	errorFile, err := os.OpenFile("errors.txt",
@@ -64,7 +67,7 @@ func init() {
 
 // 执行脚本的函数，返回结果和错误
 func RunScriptFile(command DeployCommand) (string, error) {
-	cmdStr := SCRIPT_DIR + command.Script + " " + command.Argument
+	cmdStr := scriptDir + command.Script + " " + command.Argument
 	cmd := exec.Command("/bin/bash", "-c", cmdStr)
 
 	if output, err := cmd.Output(); err != nil {
@@ -212,7 +215,7 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 	// 打开文件流，默认使用覆盖模式，同名的文件会被覆盖
-	f, err := os.OpenFile(UPLOAD_DIR+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
+	f, err := os.OpenFile(uploadDir+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		Fail(w, err)
 		return
