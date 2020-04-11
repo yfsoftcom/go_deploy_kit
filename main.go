@@ -255,6 +255,10 @@ func main() {
 	r.HandleFunc("/webhook/deploy", DeployHandler)
 	r.HandleFunc("/webhook/shell/{filename}", WebhookHandler)
 	r.HandleFunc("/upload", UploadHandler)
+
+	// r.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(local))))
+	r.Handle("/public/", http.StripPrefix("/public/", http.FileServer(http.Dir("./public"))))
+
 	fmt.Println("Server startup at http://localhost:8000")
 
 	srv := &http.Server{
