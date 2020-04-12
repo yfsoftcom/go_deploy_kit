@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"time"
 
 	mux "github.com/gorilla/mux"
@@ -33,7 +34,28 @@ var (
 	scriptDir   = os.Getenv("GDK_SCRIPT_DIR")
 	ErrorLogger *log.Logger
 	InfoLogger  *log.Logger
+	htmlDir     = "ui/build"
 )
+
+// --------- Support SPA -------
+type spaHandler struct {
+	staticPath string
+	indexPath  string
+}
+
+func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+	path = filepath.Join(h.staticPath, path)
+	_, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
+}
 
 // 初始化这些变量
 func init() {
@@ -47,13 +69,13 @@ func init() {
 	errorFile, err := os.OpenFile("errors.txt",
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatalln("Failed to open error log file:", err)
+		log.Fatalln("failed to open error log file:", err)
 	}
 
 	infoFile, err := os.OpenFile("infos.txt",
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		log.Fatalln("Failed to open error log file:", err)
+		log.Fatalln("failed to open error log file:", err)
 	}
 
 	ErrorLogger = log.New(io.MultiWriter(errorFile, os.Stderr),
@@ -77,78 +99,17 @@ func RunScriptFile(command DeployCommand) (string, error) {
 	}
 }
 
-func IndexHandler(w http.ResponseWriter, r *http.Request) {
-
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html>
-	<head>
-		<title>GDK beta</title>	
-		<link rel="stylesheet" href="https://unpkg.com/spectre.css/dist/spectre.min.css">
-		<link rel="stylesheet" href="https://unpkg.com/spectre.css/dist/spectre-exp.min.css">
-		<link rel="stylesheet" href="https://unpkg.com/spectre.css/dist/spectre-icons.min.css">
-		<link href="https://cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-	</head>
-	<body class="bg-gray">
-	<div class="container">
-	<div class="hero bg-gray">
-		<div class="hero-body">
-			<div class="login">
-				<div class="empty">
-					<div class="empty-icon"><i class="icon icon-3x icon-emoji"></i></div>
-					<p class="empty-title h5">Welcome To Use Go-Deploy-Kit!</p>
-					<p class="empty-subtitle">Start to enjoy the kit!</p>
-					<div class="column">
-						<form  enctype="multipart/form-data" 
-							style="margin-left: auto; margin-right: auto; max-width: 600px;"  
-							class="form-horizontal" 
-							action="/upload" 
-							method="POST" >
-							<div class="form-group">
-								<div class="col-3">
-									<label class="form-label">Jar:</label>
-								</div>
-								<div class="col-9">
-									<input class="form-input" name="file" type="file">
-								</div>
-							</div>
-							<div class="form-group">
-								<div class="col-3">
-									<label class="form-label">Shell:</label>
-								</div>
-								<div class="col-9">
-									<input class="form-input" name="shell" type="text">
-								</div>
-							</div>
-							<div class="form-group">
-								<div class="col-3">
-									<label class="form-label">Argument:</label>
-								</div>
-								<div class="col-9">
-									<textarea class="form-input" name="argument"></textarea>
-								</div>
-							</div>
-							<button class="btn btn-success" type="submit"><i class="icon icon-upload"></i> Submit</button>
-						</form>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-	
-	</div>
-	</body>
-</html>
-		`)
-
-}
-
-func Fail(w http.ResponseWriter, err error) {
+func fail(w http.ResponseWriter, err error) {
 	fmt.Fprintf(w, fmt.Sprintf(`{ "errno": -1, "msg": " Error: %s"}`, err.Error()))
 }
 
-func Success(w http.ResponseWriter, data string) {
+func success(w http.ResponseWriter, data string) {
 	fmt.Fprintf(w, fmt.Sprintf(`{ "errno": 0, "msg": " %s"}`, data))
+}
+
+// 接受webhook的请求处理函数
+func ApiHandler(w http.ResponseWriter, r *http.Request) {
+	success(w, "ok")
 }
 
 // 接受webhook的请求处理函数
@@ -166,16 +127,16 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 	// 将参数中的指令转换成 结构体
 	if err := json.Unmarshal(body, &command); err != nil {
 		ErrorLogger.Println(err)
-		Fail(w, err)
+		fail(w, err)
 		return
 	}
 	// 执行shell脚本，输出结果
 	if output, err := RunScriptFile(command); err != nil {
 		ErrorLogger.Println(err)
-		Fail(w, err)
+		fail(w, err)
 		return
 	} else {
-		Success(w, output)
+		success(w, output)
 	}
 }
 
@@ -187,16 +148,16 @@ func DeployHandler(w http.ResponseWriter, r *http.Request) {
 	// 将参数中的指令转换成 结构体
 	if err := json.Unmarshal([]byte(`{"script":"deploy.sh", "argument":""}`), &command); err != nil {
 		ErrorLogger.Println(err)
-		Fail(w, err)
+		fail(w, err)
 		return
 	}
 	// 执行shell脚本，输出结果
 	if output, err := RunScriptFile(command); err != nil {
 		ErrorLogger.Println(err)
-		Fail(w, err)
+		fail(w, err)
 		return
 	} else {
-		Success(w, output)
+		success(w, output)
 	}
 }
 
@@ -204,20 +165,20 @@ func DeployHandler(w http.ResponseWriter, r *http.Request) {
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	//
 	if method := r.Method; method == "GET" {
-		Fail(w, errors.New("Only support Post"))
+		fail(w, errors.New("Only support Post"))
 		return
 	}
 	r.ParseMultipartForm(32 << 20)
 	file, handler, err := r.FormFile("file")
 	if err != nil {
-		Fail(w, err)
+		fail(w, err)
 		return
 	}
 	defer file.Close()
 	// 打开文件流，默认使用覆盖模式，同名的文件会被覆盖
 	f, err := os.OpenFile(uploadDir+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
-		Fail(w, err)
+		fail(w, err)
 		return
 	}
 	defer f.Close()
@@ -232,15 +193,15 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if output, err := RunScriptFile(*command); err != nil {
 			ErrorLogger.Println(err)
-			Fail(w, err)
+			fail(w, err)
 			return
 		} else {
-			Success(w, output)
+			success(w, output)
 			return
 		}
 	}
 
-	Success(w, "upload success")
+	success(w, "upload success")
 }
 
 func main() {
@@ -250,7 +211,7 @@ func main() {
 	flag.Parse()
 
 	r := mux.NewRouter()
-	r.HandleFunc("/", IndexHandler)
+	r.HandleFunc("/api/run", ApiHandler)
 	r.HandleFunc("/webhook/run/", WebhookHandler)
 	r.HandleFunc("/webhook/deploy", DeployHandler)
 	r.HandleFunc("/webhook/shell/{filename}", WebhookHandler)
@@ -258,6 +219,9 @@ func main() {
 
 	// r.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(local))))
 	r.Handle("/public/", http.StripPrefix("/public/", http.FileServer(http.Dir("./public"))))
+
+	spa := spaHandler{staticPath: htmlDir, indexPath: "/"}
+	r.PathPrefix("/").Handler(spa)
 
 	fmt.Println("Server startup at http://localhost:8000")
 
