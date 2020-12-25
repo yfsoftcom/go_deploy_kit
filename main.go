@@ -32,6 +32,7 @@ type DeployCommand struct {
 var (
 	uploadDir   = os.Getenv("GDK_UPLOAD_DIR")
 	scriptDir   = os.Getenv("GDK_SCRIPT_DIR")
+	port        = os.Getenv("PORT")
 	ErrorLogger *log.Logger
 	InfoLogger  *log.Logger
 	htmlDir     = "ui/build"
@@ -64,6 +65,9 @@ func init() {
 	}
 	if scriptDir == "" {
 		scriptDir = "./shells/"
+	}
+	if port == "" {
+		port = "8000"
 	}
 
 	errorFile, err := os.OpenFile("errors.txt",
@@ -223,10 +227,10 @@ func main() {
 	spa := spaHandler{staticPath: htmlDir, indexPath: "/"}
 	r.PathPrefix("/").Handler(spa)
 
-	fmt.Println("Server startup at http://localhost:8000")
+	fmt.Printf("Server startup at http://localhost:%s\n", port)
 
 	srv := &http.Server{
-		Addr:         "0.0.0.0:8000",
+		Addr:         "0.0.0.0:" + port,
 		WriteTimeout: time.Second * 15,
 		ReadTimeout:  time.Second * 15,
 		IdleTimeout:  time.Second * 60,
