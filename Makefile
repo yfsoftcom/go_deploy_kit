@@ -12,3 +12,6 @@ start:
 	env GDK_UPLOAD_DIR=./uploads/ GDK_SCRIPT_DIR=./shells/ go run main.go
 build: 
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/gdk main.go
+
+zip:
+	zip -r gdk.zip bin/gdk 

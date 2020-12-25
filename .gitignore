@@ -2,3 +2,5 @@ uploads
 shells
 *.txt
 bin/
+.DS_Store
+gdk.zip
