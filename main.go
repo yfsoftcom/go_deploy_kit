@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	mux "github.com/gorilla/mux"
@@ -33,6 +34,7 @@ var (
 	uploadDir   = os.Getenv("GDK_UPLOAD_DIR")
 	scriptDir   = os.Getenv("GDK_SCRIPT_DIR")
 	port        = os.Getenv("PORT")
+	timeout     = os.Getenv("TIMEOUT")
 	ErrorLogger *log.Logger
 	InfoLogger  *log.Logger
 	htmlDir     = "ui/build"
@@ -69,7 +71,9 @@ func init() {
 	if port == "" {
 		port = "8000"
 	}
-
+	if timeout == "" {
+		timeout = "60"
+	}
 	errorFile, err := os.OpenFile("errors.txt",
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -229,11 +233,12 @@ func main() {
 
 	fmt.Printf("Server startup at http://localhost:%s\n", port)
 
+	timeoutNum, _ := strconv.Atoi(timeout)
 	srv := &http.Server{
 		Addr:         "0.0.0.0:" + port,
-		WriteTimeout: time.Second * 15,
-		ReadTimeout:  time.Second * 15,
-		IdleTimeout:  time.Second * 60,
+		WriteTimeout: time.Duration(timeoutNum) * time.Second,
+		ReadTimeout:  time.Duration(timeoutNum) * time.Second,
+		IdleTimeout:  time.Duration(timeoutNum*4) * time.Second,
 		Handler:      r,
 	}
 
