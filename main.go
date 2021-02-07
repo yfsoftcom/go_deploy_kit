@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -97,14 +98,17 @@ func init() {
 
 // 执行脚本的函数，返回结果和错误
 func RunScriptFile(command DeployCommand) (string, error) {
-	cmdStr := scriptDir + command.Script + " " + command.Argument
-	cmd := exec.Command("/bin/bash", "-c", cmdStr)
 
-	if output, err := cmd.Output(); err != nil {
+	cmd := exec.Command("bash", "-c", scriptDir+command.Script+" "+command.Argument)
+	cmd.Env = os.Environ()
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		log.Fatal(err)
 		return "", err
-	} else {
-		return string(output), nil
 	}
+	return out.String(), nil
 }
 
 func fail(w http.ResponseWriter, err error) {
